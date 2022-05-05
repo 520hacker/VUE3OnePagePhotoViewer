@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <title>
+        瀑布流 图片鉴赏 单页应用
+    </title>
+    <link href="//unpkg.com/viewerjs/dist/viewer.css" rel="stylesheet">
+    <script src="//unpkg.com/vue@next"></script>
+    <script src="//unpkg.com/axios"></script>
+    <script src="//unpkg.com/viewerjs/dist/viewer.js"></script>
+    <script src="//unpkg.com/v-viewer@next/dist/index.umd.js"></script>
+    <style>
+        ul,
+        li {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #app {
+            font-family: Avenir, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        .v-waterfall-content {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .v-waterfall-item {
+            position: absolute;
+        }
+
+        .v-waterfall-item img {
+            width: 100%;
+            height: 100%;
+        }
+
+        .loadmore {
+            opacity: 0.6;
+            position: fixed;
+            left: 0px;
+            bottom: 0px;
+            clear: both;
+            background: #2c3e50;
+            display: block;
+            width: 100px;
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            color: #fff;
+        }
+
+        .showmenu {
+            opacity: 0.6;
+            position: fixed;
+            right: 0px;
+            top: 0px;
+            clear: both;
+            background: #2c3e50;
+            display: block;
+            width: 100px;
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            color: #fff;
+        }
+
+        .menu {
+            border-radius: 10px;
+            opacity: 0.8;
+            position: fixed;
+            left: 50%;
+            top: 0px;
+            clear: both;
+            background: #2c3e50;
+            display: block;
+            width: 320px;
+            margin-left: -160px;
+            height: 320px;
+            line-height: 40px;
+            text-align: center;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <noscript>
+        <strong>We're sorry but we doesn't work properly without JavaScript enabled.
+            Please enable it to continue.</strong>
+    </noscript>
+    <div class="v-waterfall-content" id="app">
+        <div v-for="(img,index) in waterfallList" :key="index" :class="'v-waterfall-item item-'+index"
+            :style="{top:img.top+'px',left:img.left+'px',width:ImgWidth+'px',height:img.height}">
+            <img :src="img.src" alt="" @click="show(img)" onerror="this.style.display='none'">
+        </div>
+        <div class="showmenu" v-show="showmenu" @click="showmenubox = true"><span>设置</span></div>
+        <div class="loadmore" v-show="loading"><span>加载中..</span></div>
+        <div class="loadmore" v-show="!loading && showloadmore" @click="getData"><span>加载更多</span></div>
+        <div class="menu" v-show="showmenubox">
+            <ul>
+                <li>开始 <input v-model="offset"> </li>
+                <li>标签 <input v-model="keyword"> </li>
+                <li><span @click="saveSetting">保存</span>
+                </li>
+            </ul>
+            <hr />
+            <h4 @click="randomTag">随机</h4>
+            <h4 @click="saveNew">最新</h4>
+        </div>
+    </div>
+</body>
+
+</html>
+
+<script>
+    const App = {
+        data() {
+            return {
+                loadIndex: 0,
+                keywords: ["原创", "丝袜", "逍遥", "黑丝", "随心", "放置", "体验", "美女", "极限", "固定", "少女", "白丝", "试镜", "妹子", "JK", "肉丝", "海语", "女仆", "新人", "户外", "定制", "OL", "女孩", "旗袍", "可爱", "空姐", "挠痒", "姐妹", "一往情深", "金属", "入室", "双人", "老师", "马尾", "新模", "象人", "学生", "视频", "白袜", "制服", "新月", "美少女"],
+                keyword: '',
+                showloadmore: false,
+                showmenubox: false,
+                showmenu: true,
+                apiHost: "https://bafybeia4fowtgmvoafokxqhidrsnvbpqcngq4cjo47ulqrxs3bf5ofgvq4.ipfs.cf-ipfs.com/",
+                offset: 0,
+                limit: 10,
+                offset: 0,
+
+                waterfallList: [],
+                ImgWidth: '',
+                ImgCol: 5,
+                ImgRight: 10,
+                ImgBottom: 10,
+                deviationHeight: [],
+                imgList: [],
+                preImgList: [],
+                viewHeight: 700,
+                screenWidth: document.body.clientWidth,
+                loading: false,
+                domainReplaceFrom: ['139.196.222.20'],
+                domainReplaceTo: ['47.242.121.112'],
+                fullList: [], 
+            }
+        },
+        watch: {
+
+        },
+        created() {
+            this.loadSetting();
+            if (this.offset > 0) {
+                this.randomOffset();
+            }
+
+            // alert('测试数据比较大，请耐心等待')
+
+            this.checkCol();
+            this.initData();
+            this.viewHeight = document.documentElement.clientHeight;
+        },
+        mounted() {
+            window.addEventListener('scroll', this.handleScroll, true);
+
+            this.calculationWidth();
+            const that = this;
+            window.onresize = () => {
+                return (() => {
+                    window.location.reload()
+                    window.screenWidth = document.body.clientWidth
+                    that.screenWidth = window.screenWidth
+                    that.viewHeight = document.documentElement.clientHeight
+                    that.checkCol()
+                })()
+            }
+        },
+        unmounted() {
+            window.removeEventListener('scroll', this.handleScroll);
+        },
+        methods: {
+            // 数据清洗，解决地址问题，单条
+            reUrl(url) {
+                for (var i in this.domainReplaceFrom) {
+                    if (url.indexOf(this.domainReplaceFrom[i]) > 0) {
+                        url = url.replace(this.domainReplaceFrom[i], this.domainReplaceTo[i]);
+                    }
+                }
+
+                return url;
+            },
+            // 数据清洗，解决地址问题，列表
+            reUrls(urls) {
+                var newUrls = [];
+                for (var url in urls) {
+                    newUrls.push(this.reUrl(urls[url]));
+                }
+
+                return newUrls;
+            },
+            // 数据清洗，去重
+            unique(arr) {
+                try {
+                    return Array.from(new Set(arr))
+                } catch {
+                    return arr;
+                }
+            },
+            // 随机标签
+            randomTag() {
+                var offset = Math.floor(Math.random() * (this.keywords.length - 1)) + 1;
+                this.keyword = this.keywords[offset];
+                this.saveRandom();
+            },
+            // 随机开始位置
+            randomOffset() {
+                this.offset = Math.floor(Math.random() * (100 - 1)) + 1;
+            },
+            // 设置为从最新位置开始
+            saveNew() {
+                this.offset = 0;
+                this.keyword = '';
+                this.saveSetting();
+            },
+            // 设置为随机位置开始
+            saveRandom() {
+                this.offset = Math.floor(Math.random() * (100 - 10)) + 10;
+                this.saveSetting();
+            },
+            // 从localStorage加载配置
+            loadSetting() {
+                try {
+                    var keyword = localStorage.getItem('keyword');
+                    if (keyword) {
+                        this.keyword = keyword;
+                    }
+
+                    this.offset = parseInt(localStorage.getItem('offset'));
+                    if (this.offset < 0) {
+                        this.offset = 0;
+                    }
+                }
+                catch
+                {
+                    this.offset = 0;
+                }
+
+                if (isNaN(this.offset)) {
+                    this.offset = 0;
+                }
+            },
+            // 将配置保存到 localStorage
+            saveSetting() {
+                localStorage.setItem('offset', this.offset);
+                localStorage.setItem('keyword', this.keyword);
+                this.showmenubox = false;
+                window.location.reload();
+            },
+            // 进入预览
+            show(img) {
+                try {
+                    var data = this.imgList.filter(function (item) {
+                        return item.item.id == img.id;
+                    });
+
+                    var imgs = data[0].item.previewImages.split(',');
+                    imgs = this.reUrls(imgs);
+
+                    var i = 0;
+
+                    for (var index in imgs) {
+                        if (img.src == imgs[index]) {
+                            i = index;
+                            break;
+                        }
+                    }
+
+                    // console.log(data);
+                    const $viewer = this.$viewerApi({
+                        options: {
+                            toolbar: true,
+                            // url: 'data-source',
+                            initialViewIndex: i,
+                        },
+                        images: imgs
+                    })
+                } catch (err) {
+                    console.log(err)
+                }
+            },
+            // 页面滚到到底部自动加载更多
+            handleScroll() {
+                let minHeight = Math.min.apply(null, this.deviationHeight);
+                // 滚动条滚动的高度
+                let scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop;
+                // console.log(scrollTop)
+                this.showmenu = scrollTop <= 0;
+                // 到达最底层的高度最低的一列
+                if (scrollTop + this.viewHeight > minHeight - 100) {
+                    this.getData();
+                } else {
+                    this.showloadmore = true;
+                }
+            },
+            // 加载数据
+            initData() {
+                var self = this;
+                // this.loading = true;
+                var url = this.apiHost;
+                axios.get(url).then(res => {
+                    self.fullList = res.data.items;
+                    self.loading = false;
+                    self.getData();
+                }).catch(err => {
+                    console.log(err);
+                });
+            },
+            getData() {
+                var self = this;
+                if (this.loading == true) {
+                    console.log('wait loading');
+                    return;
+                }
+
+                console.log(this.fullList);
+                this.loading = true;
+                this.loadIndex = this.loadIndex + 1;
+                var list = [];
+
+                console.log(this.keyword)
+
+                if (this.keyword.length > 0) {
+                    list = this.fullList.filter(function (item) {  
+                        return item.title.indexOf(self.keyword) > 0 || item.content.indexOf(self.keyword) > 0
+                    });
+                    console.log(list)
+                }else{
+                    list = this.fullList;
+                }
+
+                list = list.slice(this.offset, this.offset + this.limit);
+                console.log(list);
+                this.applyData(list); 
+            },
+            applyData(list) {
+                var self = this;
+                for (var item in list) {
+                    try {
+                        var images = list[item].previewImages;
+                        var imageArr = images.split(',');
+                        for (var imgIndex in imageArr) {
+                            try {
+                                var path = self.reUrl(imageArr[imgIndex]);
+                                var cimgs = self.imgList.filter(function (item) {
+                                    return item.imageUrl == path;
+                                });
+                                if (cimgs == null || cimgs.length == 0) {
+                                    self.imgList.push({
+                                        "imageUrl": path,
+                                        "item": list[item]
+                                    });
+                                }
+                            } catch {
+
+                            }
+                        }
+                    } catch (err) {
+                        alert(err)
+                    }
+                }
+
+                self.showloadmore = false;
+                self.imgList = self.unique(self.imgList);
+
+                self.imgPreloading();
+
+                self.offset = self.offset + this.limit;
+                console.log(self.offset)
+            },
+            // 瀑布流，根据页宽，每页显示多少列
+            checkCol() {
+                if (this.screenWidth > 2000) {
+                    this.ImgCol = 8;
+                }
+
+                if (this.screenWidth > 2500) {
+                    this.ImgCol = 10;
+                }
+
+                if (this.screenWidth < 900) {
+                    this.ImgCol = 4;
+                }
+
+                if (this.screenWidth < 700) {
+                    this.ImgCol = 3;
+                }
+
+                if (this.screenWidth < 500) {
+                    this.ImgCol = 2;
+                }
+            },
+            // 瀑布流，计算每个图片的宽度
+            calculationWidth() {
+                this.ImgWidth = (this.screenWidth - this.ImgRight * this.ImgCol) / this.ImgCol;
+                //初始化偏移高度数组
+                this.deviationHeight = new Array(this.ImgCol);
+                for (let i = 0; i < this.deviationHeight.length; i++) {
+                    this.deviationHeight[i] = 0;
+                }
+                this.imgPreloading()
+            },
+            // 瀑布流，图片预加载
+            imgPreloading() {
+                var self = this;
+                self.loading = true;
+                var imgList = self.imgList;
+                var preImgList = self.preImgList;
+                var preImgLoadList = [];
+                for (var i in imgList) {
+                    var path = self.reUrl(imgList[i].imageUrl);
+                    var pimgs = self.preImgList.filter(function (item) {
+                        return item.src == path;
+                    });
+
+                    if (pimgs.length <= 0) {
+                        self.preImgList.push(imgList[i]);
+                        preImgLoadList.push(imgList[i]);
+                    } else {
+                        console.log('repeat_' + path)
+                    }
+                }
+
+                for (let i = 0; i < preImgLoadList.length; i++) {
+                    try {
+                        var src = self.reUrl(preImgLoadList[i].imageUrl);
+                        var cimgs = self.waterfallList.filter(function (item) {
+                            return item.src == src;
+                        });
+
+                        if (cimgs.length > 0) {
+                            console.log('repeat3_' + src)
+                            continue;
+                        }
+
+                        let aImg = new Image();
+                        aImg.src = src;
+
+                        aImg.onerror = () => {
+                            console.log('error to load ' + src);
+                        }
+
+                        aImg.onload = () => {
+                            var src = self.reUrl(preImgLoadList[i].imageUrl);
+                            self.loading = true;
+                            let imgData = {};
+                            //按比例计算图片高度
+                            imgData.height = self.ImgWidth / aImg.width * aImg.height;
+                            imgData.src = src;
+                            imgData.id = preImgLoadList[i].item.id;
+                            // console.log(self.loading + "_" + self.loadIndex + "_" + i + "_" + imgData.id + "_" + imgData.src)
+                            cimgs = self.waterfallList.filter(function (item) {
+                                return item.src == imgData.src;
+                            });
+
+                            if (cimgs == null || cimgs.length <= 0) {
+                                console.log("loaded " + self.loading + "_" + self.loadIndex + "_" + i + "_" + imgData.id + "_" + imgData.src)
+                                self.waterfallList.push(imgData);
+                                self.rankImg(imgData);
+                            } else {
+                                console.log('repeat2_' + src)
+                            }
+                            self.loading = false;
+                        }
+                    } catch {
+                        self.loading = false;
+                    }
+                }
+            },
+            // 瀑布流，布局
+            rankImg(imgData) {
+                try {
+                    let { ImgWidth, ImgRight, ImgBottom, deviationHeight } = this;
+                    let minIndex = this.filterMin();
+                    imgData.top = deviationHeight[minIndex];
+                    imgData.left = minIndex * (ImgRight + ImgWidth);
+                    deviationHeight[minIndex] += imgData.height + ImgBottom;
+                } catch { }
+            },
+            // 瀑布流，找到最短的列并返回下标
+            filterMin() {
+                const min = Math.min.apply(null, this.deviationHeight);
+                return this.deviationHeight.indexOf(min);
+            },
+        }
+    }
+
+    const app = Vue.createApp(App)
+    // 加载预览组件
+    app.use(VueViewer.default)
+    app.mount('#app')
+
+</script>
